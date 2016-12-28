@@ -51,6 +51,7 @@ void setup() {
     strip.begin();
     strip.show(); // Initialize all pixels to 'off'
 
+    colorWipe(strip.Color(255, 255, 255));
 }
 
 /*
@@ -60,10 +61,16 @@ rainbowBreathe(numLoops(refer to integer above),(duration for lights to hold bef
 
 void loop() {
 
-    
+    /*
+    for (int i=0; i< 100; i++) {
+        strip.setPixelColor(i, strip.Color(255, 255, 255));
+    }
+    strip.show();
+    */
+    /*
     rgbBreathe(strip.Color(255, 255, 255), numLoops1, 0);
-    //rainbowBreathe(numLoops2, 0);
-
+    rainbowBreathe(numLoops2, 0);
+*/
 
     /*
     // Some example procedures showing how to display to the pixels:
@@ -86,6 +93,13 @@ void loop() {
     delay(200);
 }
 
+// Fill the dots one after the other with a color
+void colorWipe(uint32_t c) {
+    for(uint16_t i=0; i<strip.numPixels(); i++) {
+        strip.setPixelColor(i, c);
+    }
+    strip.show();
+}
 // Fill the dots one after the other with a color
 void colorWipe(uint32_t c, uint8_t wait) {
     for(uint16_t i=0; i<strip.numPixels(); i++) {
