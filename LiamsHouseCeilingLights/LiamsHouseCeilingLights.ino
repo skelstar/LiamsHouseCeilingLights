@@ -7,6 +7,7 @@
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include "fauxmoESP.h"
 #include "wificonfig.h"
 
 char versionText[] = "Liams House Ceiling Lights v1.0.0";
@@ -26,8 +27,12 @@ int numLoops2 = 5;
 int fadeInWait = 30;          //lighting up speed, steps.
 int fadeOutWait = 50;         //dimming speed, steps.
 
+bool lightsOn = true;
+
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_PIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
+fauxmoESP fauxmo;
+ 
 void setup() {
 
     Serial.begin(9600);
@@ -36,20 +41,35 @@ void setup() {
     Serial.println(versionText);
 
     setupOTA("LiamsHouseCeilingLightsController");
+
+    // Fauxmo
+    fauxmo.addDevice("liams strip lights");
+    //fauxmo.addDevice("light two");
+    fauxmo.onMessage([](const char * device_name, bool state) {
+        Serial.printf("[MAIN] %s state: %s\n", device_name, state ? "ON" : "OFF");
+
+        if (state == false) {
+            colorWipe(strip.Color(0, 0, 0));
+            strip.show();
+            lightsOn = false;
+        } else {
+            lightsOn = true;
+        }
+    });
+ 
     
     strip.begin();
     strip.show(); // Initialize all pixels to 'off'
 
-    colorWipe(strip.Color(255, 255, 255));
+    //colorWipe(strip.Color(255, 255, 255));
 }
 
 void loop() {
 
-    //rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
-    rgbBreathe(strip.Color(255, 255, 255), 2, 0);
-    
-    //rainbowBreathe(numLoops(refer to integer above),(duration for lights to hold before dimming. insert 0 to skip hold)
-    //rainbowBreathe(2, 0);
+    if (lightsOn) {
+        //rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
+        rgbBreathe(strip.Color(255, 255, 255), 2, 0);
+    }
 
     ArduinoOTA.handle();
 
