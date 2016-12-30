@@ -11,38 +11,20 @@
 
 #define NEO_KHZ400 0x0100
 
-#define PIN 0
-#define NUM_PIXELS      10*10
+#define PIN             13
+#define NUM_PIXELS      70
 
 // https://github.com/kit-ho/NeoPixel-WS2812b-Strip-Breathing-Code-with-Arduino
 int MinBrightness = 10;       //value 0-255
-int MaxBrightness = 127;      //value 0-255
+int MaxBrightness = 255;      //value 0-255
 
 int numLoops1 = 10;
 int numLoops2 = 5;
-//int numLoops3 = 5;
-//int numLoops4 = 3;          //add new integer and value for more color's loop if needed.
 
 int fadeInWait = 30;          //lighting up speed, steps.
 int fadeOutWait = 50;         //dimming speed, steps.
 
-
-
-
-// Parameter 1 = number of pixels in strip
-// Parameter 2 = Arduino pin number (most are valid)
-// Parameter 3 = pixel type flags, add together as needed:
-//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
-//   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
-//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
-//   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
-//   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_PIXELS, PIN, NEO_GRB + NEO_KHZ800);
-
-// IMPORTANT: To reduce NeoPixel burnout risk, add 1000 uF capacitor across
-// pixel power leads, add 300 - 500 Ohm resistor on first pixel's data input
-// and minimize distance between Arduino and first pixel.  Avoid connecting
-// on a live circuit...if you must, connect GND first.
 
 void setup() {
         
@@ -54,12 +36,20 @@ void setup() {
     colorWipe(strip.Color(255, 255, 255));
 }
 
-/*
-rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
-rainbowBreathe(numLoops(refer to integer above),(duration for lights to hold before dimming. insert 0 to skip hold)
-*/
-
 void loop() {
+
+    theaterChase(strip.Color(255, 0, 0), 50);
+    theaterChaseRainbow(50);
+
+
+    //rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
+    rgbBreathe(strip.Color(255, 255, 255), 2, 0);
+    
+    //rainbowBreathe(numLoops(refer to integer above),(duration for lights to hold before dimming. insert 0 to skip hold)
+    rainbowBreathe(2, 0);
+
+    
+
 
     /*
     for (int i=0; i< 100; i++) {
@@ -130,6 +120,9 @@ void rainbowCycle(uint8_t wait) {
             strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
         }
         strip.show();
+        
+        ArduinoOTA.handle();
+
         delay(wait);
     }
 }
@@ -142,7 +135,10 @@ void theaterChase(uint32_t c, uint8_t wait) {
                 strip.setPixelColor(i+q, c);    //turn every third pixel on
             }
             strip.show();
+
             
+            ArduinoOTA.handle();
+
             delay(wait);
             
             for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
@@ -161,6 +157,8 @@ void theaterChaseRainbow(uint8_t wait) {
             }
             strip.show();
             
+            ArduinoOTA.handle();
+
             delay(wait);
             
             for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
@@ -172,6 +170,9 @@ void theaterChaseRainbow(uint8_t wait) {
 
 void rgbBreathe(uint32_t color, uint8_t loops, uint8_t wait) {
     for (int j = 0; j < loops; j++) {
+
+        ArduinoOTA.handle();
+
         for (uint8_t b = MinBrightness; b < MaxBrightness; b++) {
             strip.setBrightness(b * 255 / 255);
             for (uint16_t i = 0; i < strip.numPixels(); i++) {
@@ -199,6 +200,9 @@ void rgbBreathe(uint32_t color, uint8_t loops, uint8_t wait) {
 
 void rainbowBreathe(uint8_t x, uint8_t y) {
     for (int j = 0; j < x; j++) {
+
+        ArduinoOTA.handle();
+
         for (uint8_t b = MinBrightness; b < MaxBrightness; b++) {
                 strip.setBrightness(b * 255 / 255);
                 for (uint8_t i = 0; i < strip.numPixels(); i++) {
