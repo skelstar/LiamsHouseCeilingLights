@@ -9,6 +9,8 @@
 #include <ArduinoOTA.h>
 #include "wificonfig.h"
 
+char versionText[] = "Liams House Ceiling Lights v1.0.0";
+
 #define NEO_KHZ400 0x0100
 
 #define PIN             13
@@ -27,7 +29,12 @@ int fadeOutWait = 50;         //dimming speed, steps.
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_PIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 void setup() {
-        
+
+    Serial.begin(9600);
+    delay(100);
+    Serial.println("Booting");
+    Serial.println(versionText);
+
     setupOTA("LiamsHouseCeilingLightsController");
     
     strip.begin();
@@ -38,46 +45,12 @@ void setup() {
 
 void loop() {
 
-    theaterChase(strip.Color(255, 0, 0), 50);
-    theaterChaseRainbow(50);
-
-
     //rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
     rgbBreathe(strip.Color(255, 255, 255), 2, 0);
     
     //rainbowBreathe(numLoops(refer to integer above),(duration for lights to hold before dimming. insert 0 to skip hold)
-    rainbowBreathe(2, 0);
+    //rainbowBreathe(2, 0);
 
-    
-
-
-    /*
-    for (int i=0; i< 100; i++) {
-        strip.setPixelColor(i, strip.Color(255, 255, 255));
-    }
-    strip.show();
-    */
-    /*
-    rgbBreathe(strip.Color(255, 255, 255), numLoops1, 0);
-    rainbowBreathe(numLoops2, 0);
-*/
-
-    /*
-    // Some example procedures showing how to display to the pixels:
-    colorWipe(strip.Color(255, 0, 0), 50); // Red
-    colorWipe(strip.Color(0, 255, 0), 50); // Green
-    colorWipe(strip.Color(0, 0, 255), 50); // Blue
-    //colorWipe(strip.Color(0, 0, 0, 255), 50); // White RGBW
-    // Send a theater pixel chase in...
-    theaterChase(strip.Color(127, 127, 127), 50); // White
-    theaterChase(strip.Color(127, 0, 0), 50); // Red
-    theaterChase(strip.Color(0, 0, 127), 50); // Blue
-    
-    rainbow(20);
-    rainbowCycle(20);
-    theaterChaseRainbow(50);
-    */
-  
     ArduinoOTA.handle();
 
     delay(200);
@@ -255,7 +228,7 @@ void setupOTA(char* host) {
         delay(5000);
         ESP.restart();
     }
-    
+        
     ArduinoOTA.setHostname(host);
     ArduinoOTA.onStart([]() {
         Serial.println("Start");
