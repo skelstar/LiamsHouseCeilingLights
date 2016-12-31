@@ -10,7 +10,7 @@
 #include "fauxmoESP.h"
 #include "wificonfig.h"
 
-char versionText[] = "Liams House Ceiling Lights v1.0.0";
+char versionText[] = "Liams House Ceiling Lights v1.0.1";
 
 #define NEO_KHZ400 0x0100
 
@@ -28,6 +28,7 @@ int fadeInWait = 30;          //lighting up speed, steps.
 int fadeOutWait = 50;         //dimming speed, steps.
 
 bool lightsOn = true;
+bool clearedPixels = false;
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_PIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
@@ -67,8 +68,15 @@ void setup() {
 void loop() {
 
     if (lightsOn) {
+        clearedPixels = false;
         //rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
         rgbBreathe(strip.Color(255, 255, 255), 2, 0);
+    }
+    else {
+        if (!clearedPixels) {
+            colorWipe(strip.Color(0,0,0));
+        }
+        clearedPixels = true;
     }
 
     ArduinoOTA.handle();
