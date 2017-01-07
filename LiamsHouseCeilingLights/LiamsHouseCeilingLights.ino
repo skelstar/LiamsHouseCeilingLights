@@ -10,7 +10,7 @@
 #include "fauxmoESP.h"
 #include "wificonfig.h"
 
-char versionText[] = "Liams House Ceiling Lights v1.0.1";
+char versionText[] = "Liams House Ceiling Lights v1.0.2";
 
 #define NEO_KHZ400 0x0100
 
@@ -36,6 +36,13 @@ fauxmoESP fauxmo;
  
 void setup() {
 
+    strip.begin();
+    strip.show(); // Initialize all pixels to 'off'
+
+    colorWipe(strip.Color(255, 255, 255));
+
+    lightsOn = true;
+
     Serial.begin(9600);
     delay(100);
     Serial.println("Booting");
@@ -57,27 +64,21 @@ void setup() {
             lightsOn = true;
         }
     });
- 
-    
-    strip.begin();
-    strip.show(); // Initialize all pixels to 'off'
-
-    //colorWipe(strip.Color(255, 255, 255));
 }
 
 void loop() {
 
-    if (lightsOn) {
-        clearedPixels = false;
-        //rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
-        rgbBreathe(strip.Color(255, 255, 255), 2, 0);
-    }
-    else {
-        if (!clearedPixels) {
-            colorWipe(strip.Color(0,0,0));
-        }
-        clearedPixels = true;
-    }
+    // if (lightsOn) {
+    //     clearedPixels = false;
+    //     //rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
+    //     rgbBreathe(strip.Color(255, 255, 255), 2, 0);
+    // }
+    // else {
+    //     if (!clearedPixels) {
+    //         colorWipe(strip.Color(0,0,0));
+    //     }
+    //     clearedPixels = true;
+    // }
 
     ArduinoOTA.handle();
 
