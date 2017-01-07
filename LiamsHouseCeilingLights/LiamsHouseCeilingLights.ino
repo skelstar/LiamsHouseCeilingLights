@@ -9,8 +9,12 @@
 #include <ArduinoOTA.h>
 #include "fauxmoESP.h"
 #include "wificonfig.h"
+// MQTT
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
 
-char versionText[] = "Liams House Ceiling Lights v1.0.2";
+
+char versionText[] = "Liams House Ceiling Lights v1.1.0";
 
 #define NEO_KHZ400 0x0100
 
@@ -33,6 +37,13 @@ bool clearedPixels = false;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_PIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 fauxmoESP fauxmo;
+
+
+// MQTT
+WiFiClient client;
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_USERNAME, AIO_KEY);
+Adafruit_MQTT_Publish liamsCeilingLightsControllerLog = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/liams-ceiling-lights-controller");
+
  
 void setup() {
 
@@ -48,6 +59,8 @@ void setup() {
     Serial.println("Booting");
     Serial.println(versionText);
 
+    setupWifi();
+
     setupOTA("LiamsHouseCeilingLightsController");
 
     // Fauxmo
@@ -55,6 +68,12 @@ void setup() {
     //fauxmo.addDevice("light two");
     fauxmo.onMessage([](const char * device_name, bool state) {
         Serial.printf("[MAIN] %s state: %s\n", device_name, state ? "ON" : "OFF");
+
+        if (state) {
+            logMessage("Liams Strip Lights state: ON");
+        } else {
+            logMessage("Liams Strip Lights state: OFF");
+        }
 
         if (state == false) {
             colorWipe(strip.Color(0, 0, 0));
@@ -80,9 +99,20 @@ void loop() {
     //     clearedPixels = true;
     // }
 
+    MQTT_connect();
+
     ArduinoOTA.handle();
 
     delay(200);
+}
+
+void logMessage(char* message) {
+
+    if (!liamsCeilingLightsControllerLog.publish(message)) {
+        Serial.println(F("Failed"));
+    } else {
+        Serial.println(F("OK!"));
+    }
 }
 
 // Fill the dots one after the other with a color
@@ -230,9 +260,6 @@ void rainbowBreathe(uint8_t x, uint8_t y) {
     }
 }
 
-
-//NeoPixel Wheel for Rainbow---------------------------------------
-
 uint32_t Wheel(byte WheelPos) {
     WheelPos = 140 - WheelPos;       //the value here means - for 255 the strip will starts with red, 127-red will be in the middle, 0 - strip ends with red.
     if (WheelPos < 85) {
@@ -248,8 +275,8 @@ uint32_t Wheel(byte WheelPos) {
 
 /* --------------------------------------------------------- */
 
-void setupOTA(char* host) {
-    
+void setupWifi() {
+
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
     while (WiFi.waitForConnectResult() != WL_CONNECTED) {
@@ -257,13 +284,42 @@ void setupOTA(char* host) {
         delay(5000);
         ESP.restart();
     }
-        
+}
+
+void MQTT_connect() {
+
+    int8_t ret;
+
+    // Stop if already connected.
+    if (mqtt.connected()) {
+        return;
+    }
+
+    Serial.print("Connecting to MQTT... ");
+
+    uint8_t retries = 3;
+    while ((ret = mqtt.connect()) != 0) {       // connect will return 0 for connected
+        Serial.println(mqtt.connectErrorString(ret));
+        Serial.println("Retrying MQTT connection in 5 seconds...");
+        mqtt.disconnect();
+        delay(5000);  // wait 5 seconds
+        retries--;
+        if (retries == 0) {
+            // basically die and wait for WDT to reset me
+            while (1);
+        }
+    }
+    Serial.println("MQTT Connected!");
+}
+
+void setupOTA(char* host) {
+    
     ArduinoOTA.setHostname(host);
     ArduinoOTA.onStart([]() {
-        Serial.println("Start");
+        Serial.println("OTA Start");
     });
     ArduinoOTA.onEnd([]() {
-        Serial.println("\nEnd");
+        Serial.println("\nOTA End");
     });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
         Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
@@ -279,3 +335,4 @@ void setupOTA(char* host) {
 
     ArduinoOTA.begin();
 }
+
