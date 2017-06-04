@@ -1,338 +1,266 @@
+#include <myWifiHelper.h>
+#include <myPushButton.h>
+#include <TaskScheduler.h>
 #include <Adafruit_NeoPixel.h>
-#ifdef __AVR__
-  #include <avr/power.h>
-#endif
 
-#include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
-#include <ArduinoOTA.h>
-#include "fauxmoESP.h"
-#include "wificonfig.h"
-// MQTT
-#include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
+char versionText[] = "Liams House Ceiling Lights v2.0";
 
 
-char versionText[] = "Liams House Ceiling Lights v1.1.0";
+#define     WIFI_HOSTNAME               "/liamshouse/ceiling-lights"
 
-#define NEO_KHZ400 0x0100
+#define     TOPIC_ONLINE                "/liamshouse/ceiling_lights/online"
+#define     TOPIC_COMMAND               "/liamshouse/ceiling_lights/command"
+#define     TOPIC_EVENT                 "/liamshouse/ceiling_lights/event"
+#define     TOPIC_TIMESTAMP             "/dev/timestamp"
 
-#define PIN             13
-#define NUM_PIXELS      70
+#define     TOUCH_SIG_PIN   0
 
-// https://github.com/kit-ho/NeoPixel-WS2812b-Strip-Breathing-Code-with-Arduino
-int MinBrightness = 10;       //value 0-255
-int MaxBrightness = 255;      //value 0-255
+//--------------------------------------------------------------------------------
 
-int numLoops1 = 10;
-int numLoops2 = 5;
+#define     PIXEL_PIN   2
+#define     PIXEL_COUNT 140
+#define		BRIGHT_MAX	256
 
-int fadeInWait = 30;          //lighting up speed, steps.
-int fadeOutWait = 50;         //dimming speed, steps.
-
-bool lightsOn = true;
-bool clearedPixels = false;
-
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_PIXELS, PIN, NEO_GRB + NEO_KHZ800);
-
-fauxmoESP fauxmo;
+// 0 - 83mA
+// 4 - 148mA
+// 10 - 240mA 15.7
+// 20 - 356mA 13.8ma/led?  (356-80 / 20)
+// 140 - (15mA * 140 + 83mA) 2.1A
 
 
-// MQTT
-WiFiClient client;
-Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_USERNAME, AIO_KEY);
-Adafruit_MQTT_Publish liamsCeilingLightsControllerLog = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/liams-ceiling-lights-controller");
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIXEL_PIN, NEO_GRBW + NEO_KHZ800);
 
+int gamma1[] = {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
+    1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
+    2,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  5,  5,  5,
+    5,  6,  6,  6,  6,  7,  7,  7,  7,  8,  8,  8,  9,  9,  9, 10,
+   10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16,
+   17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25,
+   25, 26, 27, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36,
+   37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 50,
+   51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68,
+   69, 70, 72, 73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89,
+   90, 92, 93, 95, 96, 98, 99,101,102,104,105,107,109,110,112,114,
+  115,117,119,120,122,124,126,127,129,131,133,135,137,138,140,142,
+  144,146,148,150,152,154,156,158,160,162,164,167,169,171,173,175,
+  177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
+  215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
+
+//---------------------------------------------------------------
+
+MyWifiHelper wifiHelper(WIFI_HOSTNAME);
+
+void mqttcallback_timestamp(byte* payload, unsigned int length) {
+	wifiHelper.mqttPublish(TOPIC_ONLINE, "1");
+}
+
+void mqttcallback_command(byte *payload, unsigned int length) {
+
+    JsonObject& root = wifiHelper.mqttGetJson(payload);
+    const char* command = root["command"];
+    const char* value = root["value"];
+
+    if (strcmp(command, "LED") == 0) {
+     	if (strcmp(value, "FADE_WHITE_IN") == 0) {
+     		fadeInToWhite(10);
+     	}
+     	else if (strcmp(value, "FADE_WHITE_OUT") == 0) {
+     		fadeOutFromWhite(10);
+     	}
+     	else if (strcmp(value, "WHITE_ON") == 0) {
+     		fullWhite();
+     	}
+     	else if (strcmp(value, "OFF") == 0) {
+     		colorWipe(strip.Color(0,0,0,0), 0);
+     	}
+     	else if (strcmp(value, "RAINBOW") == 0) {
+     		rainbowCycle(10);
+     	}
+    }
+}
+
+//--------------------------------------------------------------------------------
+
+Scheduler runner;
+
+#define RUN_ONCE    2
+
+bool notificationActive = false;
+
+// void tClearNotification_callback();
+// Task tClearNotification(2000, RUN_ONCE, &tClearNotification_callback, &runner, false);
+// void tClearNotification_callback() {
+//     if (tClearNotification.isLastIteration()) {
+// 	    display.clear();
+//         display.displayOff();
+//         notificationActive = false;
+//     }
+// }
+
+//--------------------------------------------------------------------------------
+
+
+void button_callback(int eventCode, int eventParam);
+#define NO_PULLUP       false
+#define WITH_PULLUP		true
+#define LOW_IS_LOW    	LOW    
+#define LOW_IS_HIGH   	HIGH    
+myPushButton touch(TOUCH_SIG_PIN, WITH_PULLUP, 2000, LOW_IS_HIGH, button_callback);
+
+void button_callback(int eventCode, int eventParam) {
+
+    switch (eventParam) {
+        case touch.EV_BUTTON_PRESSED:
+            wifiHelper.mqttPublish(TOPIC_EVENT, "EV_BUTTON_PRESSED");
+            Serial.println("EV_BUTTON_PRESSED");
+            break;
+        case touch.EV_HELD_FOR_LONG_ENOUGH:
+            wifiHelper.mqttPublish(TOPIC_EVENT, "EV_HELD_FOR_LONG_ENOUGH");
+            Serial.println("EV_HELD_FOR_LONG_ENOUGH");
+            break;
+        case touch.EV_RELEASED:
+        case touch.ST_WAITING_FOR_RELEASE_FROM_HELD_TIME:
+            wifiHelper.mqttPublish(TOPIC_EVENT, "EV_RELEASED");
+            Serial.println("EV_RELEASED or ST_WAITING_FOR_RELEASE_FROM_HELD_TIME");
+            break;
+        default:    
+            //Serial.println("some event");
+            break;
+    }
+}
+
+//--------------------------------------------------------------------------------
  
 void setup() {
 
     strip.begin();
     strip.show(); // Initialize all pixels to 'off'
 
-    colorWipe(strip.Color(255, 255, 255));
-
-    lightsOn = true;
-
     Serial.begin(9600);
     delay(100);
     Serial.println("Booting");
     Serial.println(versionText);
 
-    setupWifi();
+    wifiHelper.setupWifi();
 
-    setupOTA("LiamsHouseCeilingLightsController");
+    wifiHelper.setupOTA(WIFI_HOSTNAME);
 
-    // Fauxmo
-    fauxmo.addDevice("liams strip lights");
-    //fauxmo.addDevice("light two");
-    fauxmo.onMessage([](const char * device_name, bool state) {
-        Serial.printf("[MAIN] %s state: %s\n", device_name, state ? "ON" : "OFF");
+    delay(300);
 
-        if (state) {
-            logMessage("Liams Strip Lights state: ON");
-        } else {
-            logMessage("Liams Strip Lights state: OFF");
-        }
+    wifiHelper.setupMqtt();
+    wifiHelper.mqttAddSubscription(TOPIC_TIMESTAMP, mqttcallback_timestamp);
+    wifiHelper.mqttAddSubscription(TOPIC_COMMAND, mqttcallback_command);
 
-        if (state == false) {
-            colorWipe(strip.Color(0, 0, 0));
-            strip.show();
-            lightsOn = false;
-        } else {
-            lightsOn = true;
-        }
-    });
+    delay(100);   
+
+    //pulseWhite(50);
 }
 
 void loop() {
 
-    // if (lightsOn) {
-    //     clearedPixels = false;
-    //     //rgbBreathe(strip.Color(insert r,g,b color code),numLoops(refer to integer above), (duration for lights to hold before dimming. insert 0 to skip hold)
-    //     rgbBreathe(strip.Color(255, 255, 255), 2, 0);
-    // }
-    // else {
-    //     if (!clearedPixels) {
-    //         colorWipe(strip.Color(0,0,0));
-    //     }
-    //     clearedPixels = true;
-    // }
+    wifiHelper.loopMqtt();
 
-    MQTT_connect();
+    runner.execute();
+
+    touch.serviceEvents();
 
     ArduinoOTA.handle();
-
-    delay(200);
 }
 
-void logMessage(char* message) {
+//--------------------------------------------------------------------------------
 
-    if (!liamsCeilingLightsControllerLog.publish(message)) {
-        Serial.println(F("Failed"));
-    } else {
-        Serial.println(F("OK!"));
-    }
-}
-
-// Fill the dots one after the other with a color
-void colorWipe(uint32_t c) {
-    for(uint16_t i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, c);
-    }
-    strip.show();
-}
 // Fill the dots one after the other with a color
 void colorWipe(uint32_t c, uint8_t wait) {
-    for(uint16_t i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, c);
-        strip.show();
-        delay(wait);
-    }
+	for(uint16_t i=0; i<strip.numPixels(); i++) {
+		strip.setPixelColor(i, c);
+		strip.show();
+		delay(wait);
+	}
 }
 
-void rainbow(uint8_t wait) {
-  uint16_t i, j;
+void pulseWhite(uint8_t wait) {
+	for(int j = 0; j < BRIGHT_MAX ; j++) {
+		for(uint16_t i=0; i<strip.numPixels(); i++) {
+			strip.setPixelColor(i, strip.Color(0,0,0, gamma1[j] ) );
+		}
+		delay(wait);
+		strip.show();
+	}
 
-  for(j=0; j<256; j++) {
-    for(i=0; i<strip.numPixels(); i++) {
-      strip.setPixelColor(i, Wheel((i+j) & 255));
-    }
-    strip.show();
-    delay(wait);
-  }
+	for(int j = BRIGHT_MAX-1; j >= 0 ; j--){
+		for(uint16_t i=0; i<strip.numPixels(); i++) {
+			strip.setPixelColor(i, strip.Color(0,0,0, gamma1[j] ) );
+		}
+		delay(wait);
+		strip.show();
+	}
+	}
+
+void fullWhite() {
+
+	for(uint16_t i=0; i<strip.numPixels(); i++) {
+		strip.setPixelColor(i, strip.Color(0,0,0, BRIGHT_MAX-1 ) );
+	}
+	strip.show();
 }
 
 // Slightly different, this makes the rainbow equally distributed throughout
 void rainbowCycle(uint8_t wait) {
-    uint16_t i, j;
-    
-    for(j=0; j<256*5; j++) { // 5 cycles of all colors on wheel
-        for(i=0; i< strip.numPixels(); i++) {
-            strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
-        }
-        strip.show();
-        
-        ArduinoOTA.handle();
+	uint16_t i, j;
 
-        delay(wait);
-    }
+	for(j=0; j<BRIGHT_MAX * 5; j++) { // 5 cycles of all colors on wheel
+		for(i=0; i< strip.numPixels(); i++) {
+			strip.setPixelColor(i, Wheel(((i * BRIGHT_MAX / strip.numPixels()) + j) & BRIGHT_MAX-1));
+		}
+		strip.show();
+		delay(wait);
+	}
 }
 
-//Theatre-style crawling lights.
-void theaterChase(uint32_t c, uint8_t wait) {
-    for (int j=0; j<10; j++) {  //do 10 cycles of chasing
-        for (int q=0; q < 3; q++) {
-            for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
-                strip.setPixelColor(i+q, c);    //turn every third pixel on
-            }
-            strip.show();
-
-            
-            ArduinoOTA.handle();
-
-            delay(wait);
-            
-            for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
-                strip.setPixelColor(i+q, 0);        //turn every third pixel off
-            }
-        }
-    }
-}
-
-//Theatre-style crawling lights with rainbow effect
-void theaterChaseRainbow(uint8_t wait) {
-    for (int j=0; j < 256; j++) {     // cycle all 256 colors in the wheel
-        for (int q=0; q < 3; q++) {
-            for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
-                strip.setPixelColor(i+q, Wheel( (i+j) % 255));    //turn every third pixel on
-            }
-            strip.show();
-            
-            ArduinoOTA.handle();
-
-            delay(wait);
-            
-            for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
-                strip.setPixelColor(i+q, 0);        //turn every third pixel off
-            }
-        }
-    }
-}
-
-void rgbBreathe(uint32_t color, uint8_t loops, uint8_t wait) {
-    for (int j = 0; j < loops; j++) {
-
-        ArduinoOTA.handle();
-
-        for (uint8_t b = MinBrightness; b < MaxBrightness; b++) {
-            strip.setBrightness(b * 255 / 255);
-            for (uint16_t i = 0; i < strip.numPixels(); i++) {
-                strip.setPixelColor(i, color);
-            }
-            strip.show();
-            delay(fadeInWait);
-        }
-        strip.setBrightness(MaxBrightness * 255 / 255);
-        for (uint16_t i = 0; i < strip.numPixels(); i++) {
-            strip.setPixelColor(i, color);
-            strip.show();
-            delay(wait);
-        }
-        for (uint8_t b = MaxBrightness; b > MinBrightness; b--) {
-            strip.setBrightness(b * 255 / 255);
-            for (uint16_t i = 0; i < strip.numPixels(); i++) {
-                strip.setPixelColor(i, color);
-            }
-            strip.show();
-            delay(fadeOutWait);
-        }
-    }
-}
-
-void rainbowBreathe(uint8_t x, uint8_t y) {
-    for (int j = 0; j < x; j++) {
-
-        ArduinoOTA.handle();
-
-        for (uint8_t b = MinBrightness; b < MaxBrightness; b++) {
-                strip.setBrightness(b * 255 / 255);
-                for (uint8_t i = 0; i < strip.numPixels(); i++) {
-                strip.setPixelColor(i, Wheel(i * 256 / strip.numPixels()));
-            }
-            strip.show();
-            delay(fadeInWait);
-        }
-        strip.setBrightness(MaxBrightness * 255 / 255);
-        for (uint8_t i = 0; i < strip.numPixels(); i++) {
-            strip.setPixelColor(i, Wheel(i * 256 / strip.numPixels()));
-            strip.show();
-            delay(y);
-        }
-        for (uint8_t b = MaxBrightness; b > MinBrightness; b--) {
-            strip.setBrightness(b * 255 / 255);
-            for (uint8_t i = 0; i < strip.numPixels(); i++) {
-                strip.setPixelColor(i, Wheel(i * 256 / strip.numPixels()));
-            }
-            strip.show();
-            delay(fadeOutWait);
-        }
-    }
-}
-
+// Input a value 0 to BRIGHT_MAX-1 to get a color value.
+// The colours are a transition r - g - b - back to r.
 uint32_t Wheel(byte WheelPos) {
-    WheelPos = 140 - WheelPos;       //the value here means - for 255 the strip will starts with red, 127-red will be in the middle, 0 - strip ends with red.
-    if (WheelPos < 85) {
-        return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
-    }
-    if (WheelPos < 170) {
-        WheelPos -= 85;
-        return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-    }
-    WheelPos -= 170;
-    return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+  WheelPos = BRIGHT_MAX-1 - WheelPos;
+  if(WheelPos < 85) {
+    return strip.Color(BRIGHT_MAX-1 - WheelPos * 3, 0, WheelPos * 3,0);
+  }
+  if(WheelPos < 170) {
+    WheelPos -= 85;
+    return strip.Color(0, WheelPos * 3, BRIGHT_MAX-1 - WheelPos * 3,0);
+  }
+  WheelPos -= 170;
+  return strip.Color(WheelPos * 3, BRIGHT_MAX-1 - WheelPos * 3, 0,0);
 }
 
-/* --------------------------------------------------------- */
-
-void setupWifi() {
-
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-    while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-        Serial.println("Connection Failed! Rebooting...");
-        delay(5000);
-        ESP.restart();
-    }
+void fadeInToWhite(uint8_t wait) {
+	for(int j = 0; j < BRIGHT_MAX ; j++){
+		for(uint16_t i=0; i<strip.numPixels(); i++) {
+			strip.setPixelColor(i, strip.Color(0,0,0, gamma1[j] ) );
+		}
+		delay(wait);
+		strip.show();
+	}
 }
 
-void MQTT_connect() {
-
-    int8_t ret;
-
-    // Stop if already connected.
-    if (mqtt.connected()) {
-        return;
-    }
-
-    Serial.print("Connecting to MQTT... ");
-
-    uint8_t retries = 3;
-    while ((ret = mqtt.connect()) != 0) {       // connect will return 0 for connected
-        Serial.println(mqtt.connectErrorString(ret));
-        Serial.println("Retrying MQTT connection in 5 seconds...");
-        mqtt.disconnect();
-        delay(5000);  // wait 5 seconds
-        retries--;
-        if (retries == 0) {
-            // basically die and wait for WDT to reset me
-            while (1);
-        }
-    }
-    Serial.println("MQTT Connected!");
+void fadeOutFromWhite(uint8_t wait) {
+	for(int j = BRIGHT_MAX-1; j >= 0 ; j--){
+		for(uint16_t i=0; i<strip.numPixels(); i++) {
+			strip.setPixelColor(i, strip.Color(0,0,0, gamma1[j] ) );
+		}
+		delay(wait);
+		strip.show();
+	}
 }
 
-void setupOTA(char* host) {
-    
-    ArduinoOTA.setHostname(host);
-    ArduinoOTA.onStart([]() {
-        Serial.println("OTA Start");
-    });
-    ArduinoOTA.onEnd([]() {
-        Serial.println("\nOTA End");
-    });
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-    });
-    ArduinoOTA.onError([](ota_error_t error) {
-        Serial.printf("Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-        else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-        else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    });
-
-    ArduinoOTA.begin();
+uint8_t red(uint32_t c) {
+  return (c >> 8);
+}
+uint8_t green(uint32_t c) {
+  return (c >> 16);
+}
+uint8_t blue(uint32_t c) {
+  return (c);
 }
 
