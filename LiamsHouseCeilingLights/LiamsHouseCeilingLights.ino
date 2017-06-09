@@ -1,6 +1,4 @@
 #include <myWifiHelper.h>
-#include <myPushButton.h>
-#include <TaskScheduler.h>
 #include <Adafruit_NeoPixel.h>
 
 char versionText[] = "Liams House Ceiling Lights v2.0";
@@ -65,69 +63,24 @@ void mqttcallback_command(byte *payload, unsigned int length) {
     if (strcmp(command, "LED") == 0) {
      	if (strcmp(value, "FADE_WHITE_IN") == 0) {
      		fadeInToWhite(10);
+        	wifiHelper.mqttPublish(TOPIC_EVENT, (char*)value);
      	}
      	else if (strcmp(value, "FADE_WHITE_OUT") == 0) {
      		fadeOutFromWhite(10);
+        	wifiHelper.mqttPublish(TOPIC_EVENT, (char*)value);
      	}
      	else if (strcmp(value, "WHITE_ON") == 0) {
      		fullWhite();
+        	wifiHelper.mqttPublish(TOPIC_EVENT, (char*)value);
      	}
      	else if (strcmp(value, "OFF") == 0) {
      		colorWipe(strip.Color(0,0,0,0), 0);
+        	wifiHelper.mqttPublish(TOPIC_EVENT, (char*)value);
      	}
      	else if (strcmp(value, "RAINBOW") == 0) {
      		rainbowCycle(10);
+        	wifiHelper.mqttPublish(TOPIC_EVENT, (char*)value);
      	}
-    }
-}
-
-//--------------------------------------------------------------------------------
-
-Scheduler runner;
-
-#define RUN_ONCE    2
-
-bool notificationActive = false;
-
-// void tClearNotification_callback();
-// Task tClearNotification(2000, RUN_ONCE, &tClearNotification_callback, &runner, false);
-// void tClearNotification_callback() {
-//     if (tClearNotification.isLastIteration()) {
-// 	    display.clear();
-//         display.displayOff();
-//         notificationActive = false;
-//     }
-// }
-
-//--------------------------------------------------------------------------------
-
-
-void button_callback(int eventCode, int eventParam);
-#define NO_PULLUP       false
-#define WITH_PULLUP		true
-#define LOW_IS_LOW    	LOW    
-#define LOW_IS_HIGH   	HIGH    
-myPushButton touch(TOUCH_SIG_PIN, WITH_PULLUP, 2000, LOW_IS_HIGH, button_callback);
-
-void button_callback(int eventCode, int eventParam) {
-
-    switch (eventParam) {
-        case touch.EV_BUTTON_PRESSED:
-            wifiHelper.mqttPublish(TOPIC_EVENT, "EV_BUTTON_PRESSED");
-            Serial.println("EV_BUTTON_PRESSED");
-            break;
-        case touch.EV_HELD_FOR_LONG_ENOUGH:
-            wifiHelper.mqttPublish(TOPIC_EVENT, "EV_HELD_FOR_LONG_ENOUGH");
-            Serial.println("EV_HELD_FOR_LONG_ENOUGH");
-            break;
-        case touch.EV_RELEASED:
-        case touch.ST_WAITING_FOR_RELEASE_FROM_HELD_TIME:
-            wifiHelper.mqttPublish(TOPIC_EVENT, "EV_RELEASED");
-            Serial.println("EV_RELEASED or ST_WAITING_FOR_RELEASE_FROM_HELD_TIME");
-            break;
-        default:    
-            //Serial.println("some event");
-            break;
     }
 }
 
@@ -153,18 +106,17 @@ void setup() {
     wifiHelper.mqttAddSubscription(TOPIC_TIMESTAMP, mqttcallback_timestamp);
     wifiHelper.mqttAddSubscription(TOPIC_COMMAND, mqttcallback_command);
 
-    delay(100);   
+    delay(100);   	
 
-    //pulseWhite(50);
+    pulseWhite(10);
+
+    wifiHelper.loopMqtt();
+	wifiHelper.mqttPublish(TOPIC_EVENT, "Ready");
 }
 
 void loop() {
 
     wifiHelper.loopMqtt();
-
-    runner.execute();
-
-    touch.serviceEvents();
 
     ArduinoOTA.handle();
 }
